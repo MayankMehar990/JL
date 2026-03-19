@@ -216,5 +216,10 @@ public class Node {
 	public double getRequiredCapacity(double esrCapacityFactor){
 		return esrCapacityFactor * basedemand * 3600*24;
 	}
+
+	public void clearOutgoingPipes() {
+    outgoingPipes.clear();
+}
+
 }
 	

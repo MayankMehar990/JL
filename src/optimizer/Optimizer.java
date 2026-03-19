@@ -7,6 +7,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.Stack;
+import java.io.PrintWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+
+
 
 import com.google.ortools.linearsolver.MPSolver.ResultStatus;
 
@@ -22,6 +27,18 @@ import structs.PumpManualStruct;
 import structs.ValveStruct;
 
 
+
+import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Queue;
+import java.util.LinkedList;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.Stack;
+
+
 //import net.sf.javailp.Constraint;
 //import net.sf.javailp.Linear;
 //import net.sf.javailp.OptType;
@@ -35,6 +52,57 @@ import structs.ValveStruct;
 //this class is responsible for optimization of the network
 public class Optimizer {
 	
+
+
+
+	private Map<Node, Node> parent;
+	private Map<Node, Integer> rank;
+
+
+	private void makeSet() {
+    parent = new HashMap<>();
+    rank = new HashMap<>();
+
+    for (Node node : nodes.values()) {
+        parent.put(node, node);
+        rank.put(node, 0);
+    }
+	}	
+
+
+
+	private Node find(Node node) {
+    if (parent.get(node) != node) {
+        parent.put(node, find(parent.get(node)));
+    }
+    return parent.get(node);
+	}
+
+
+
+	private void union(Node a, Node b) {
+
+    Node rootA = find(a);
+    Node rootB = find(b);
+
+    if (rootA == rootB) return;
+
+    int rankA = rank.get(rootA);
+    int rankB = rank.get(rootB);
+
+    if (rankA < rankB) {
+        parent.put(rootA, rootB);
+    } else if (rankA > rankB) {
+        parent.put(rootB, rootA);
+    } else {
+        parent.put(rootB, rootA);
+        rank.put(rootA, rankA + 1);
+    }
+	}
+
+
+
+
 	private HashMap<Integer,Node> nodes; // nodeID,node
 	private HashMap<Integer,Pipe> pipes; //pipeid,pipe
 	private List<PipeCost> pipeCost;
@@ -204,11 +272,131 @@ public class Optimizer {
 		totalDemand = getTotalCapacity();		
 	}
 	
+
+
+
+
+	public int checkWeakConnectivity() {
+
+    if (nodes.isEmpty()) return 0;
+
+    // 1️⃣ Initialize disjoint sets
+    makeSet();
+
+    // 2️⃣ Union both ends of every pipe (undirected)
+    for (Pipe pipe : pipes.values()) {
+        Node start = pipe.getStartNode();
+        Node end = pipe.getEndNode();
+
+        union(start, end);
+    }
+
+    // 3️⃣ Check if all nodes share same root
+    Node reference = nodes.values().iterator().next();
+    Node root = find(reference);
+
+    for (Node node : nodes.values()) 
+        if (find(node).getNodeID() != root.getNodeID()){
+			// System.out.println("Disconnected node: " + node.getNodeID());
+			return 1;}
+    return 0;
+    
+}
+
+
+	
+
+
+	private Map<Integer, Integer> get_ideal_parents() {
+
+    /* -------- Step 1: Build undirected version of pipes -------- */
+    Map<Integer, List<Integer>> undir_pipes = new HashMap<>();
+
+    for (Pipe pipe : pipes.values()) {
+        int u = pipe.getStartNode().getNodeID();
+        int v = pipe.getEndNode().getNodeID();
+
+        undir_pipes.computeIfAbsent(u, k -> new ArrayList<>()).add(v);
+		
+		if (!undir_pipes.containsKey(u)) 
+		    undir_pipes.put(u, new ArrayList<>());
+		undir_pipes.get(u).add(v);
+        if (!undir_pipes.containsKey(v)) 
+    		undir_pipes.put(v, new ArrayList<>());
+		undir_pipes.get(v).add(u);
+    }
+
+    /* -------- Step 2: BFS to compute ideal parents -------- */
+    Map<Integer, Integer> ideal_parent = new HashMap<>();
+    Set<Integer> visited = new HashSet<>();
+    Queue<Integer> queue = new LinkedList<>();
+
+	int sourceID=source.getNodeID();
+    queue.add(sourceID);
+    visited.add(sourceID);
+
+    while (!queue.isEmpty()) {
+        int u = queue.poll();
+
+        for (int v : undir_pipes.get(u)) {
+            if (!visited.contains(v)) {
+                visited.add(v);
+                ideal_parent.put(v, u);
+                queue.add(v);
+            }
+        }
+    }
+
+    return ideal_parent;
+	}
+
+
+	///Ideal parents 
+
+
+
+	private void  orient_pipes()
+	{
+		Map<Integer, Integer> ideal_parent = get_ideal_parents();
+		for (Pipe pipe:pipes.values())
+		{
+			int u=pipe.getStartNode().getNodeID();
+			int v=pipe.getEndNode().getNodeID();
+			Integer parent = ideal_parent.get(u);
+
+			if (parent != null && parent == v) 
+    			// pipe.reverseDirection();
+				Node temp = pipe.startNode;
+    			pipe.startNode = pipe.endNode;
+    			pipe.endNode = temp;
+		
+		}
+
+		for (Node node : nodes.values()) 
+        	node.clearOutgoingPipes();
+    
+
+    	// Re-add from pipes
+    	for (Pipe pipe : pipes.values()) 
+        	pipe.getStartNode().addToOutgoingPipes(pipe);
+    	
+	}
+
+
+
+
+
 	//validate network structure
 	//should not contain cycles
 	//every node should be connected
 	private int validateNetwork(){
 		Node root = source;
+		
+		if (checkWeakConnectivity()==1)
+			return 3;
+
+		orient_pipes();
+
 		Set<Node> seen = new HashSet<Node>();
 		Stack<Node> left = new Stack<Node>();
 		left.add(root);
@@ -5684,7 +5872,8 @@ public class Optimizer {
 	public boolean Optimize() throws Exception{		
 		
 		long startTime = System.currentTimeMillis();
-		
+		System.err.println("NEW VERSION OF OPTIMIZER 16-FEB");
+
 		//validate the network layout
 		switch (validateNetwork()){
 			case 1:

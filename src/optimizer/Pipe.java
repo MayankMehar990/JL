@@ -221,5 +221,12 @@ public class Pipe {
 	public void setValveSetting(double valvesetting) {
 		this.valvesetting = valvesetting;		
 	}
+
+	public void reverseDirection() {
+    Node temp = this.startNode;
+    this.startNode = this.endNode;
+    this.endNode = temp;
+}
+
 }
 
