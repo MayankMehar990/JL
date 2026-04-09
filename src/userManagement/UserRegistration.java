@@ -25,7 +25,7 @@ public class UserRegistration extends HttpServlet {
 	public static String hashFunction(String password) throws NoSuchAlgorithmException {
 		  String salt = "salt12345"; // Extra text to be used while password hashing
 		  byte[] saltArrray = salt.getBytes(); 
-		  MessageDigest md = MessageDigest.getInstance("MD5");
+		  MessageDigest md = MessageDigest.getInstance("SHA-256");
 		  //Add password bytes to digest
 		  md.update(saltArrray); 
 		  //Get the hash's bytes 
